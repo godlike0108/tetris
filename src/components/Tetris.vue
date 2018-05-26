@@ -18,11 +18,11 @@ export default {
 
     /* Initialize Tetris */
     // init data array
-    const tetrisRow = [];
     for(let i = 0; i < this.tetrisCfgs.row; i++) {
+      let tetrisRow = [];
       for(let j = 0; j < this.tetrisCfgs.column; j++) {
         tetrisRow.push({
-          exist: false,
+          status: 0,
           x: j * this.tetrisCfgs.unitSize,
           y: i * this.tetrisCfgs.unitSize
         });
@@ -51,6 +51,17 @@ export default {
       tetrisGrid: [],
       score: 0,
       loop: null,
+      // For brick life cycle
+      touchBottom: true,
+      // Brick on control
+      brick: {},
+    }
+  },
+  computed: {
+    brickCollide() {
+      return this.brick.coord.some(coord => {
+        return this.tetrisGrid[coord.y+1][coord.x].status === 2;
+      });
     }
   },
   methods: {
@@ -60,21 +71,75 @@ export default {
       this.loop = requestAnimationFrame(this.game);
     },
     update() {
-      this.test++;
+      // bricks life cycle
+      if(!this.touchBottom) {
+        this.dropBrick();
+      } else {
+        this.generateBrick();
+        this.touchBottom = false;
+      }
     },
     render() {
       // Clear the previous frame
       this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-
-
-      console.log('Looping')
+      // Render bricks
+      for(let i = 0; i < this.tetrisCfgs.row; i++) {
+        for(let j = 0; j < this.tetrisCfgs.column; j++) {
+          if(this.tetrisGrid[i][j].status !== 0) {
+            let sX = this.tetrisGrid[i][j].x;
+            let sY = this.tetrisGrid[i][j].y;
+            this.ctx.fillRect(sX, sY, this.tetrisCfgs.unitSize, this.tetrisCfgs.unitSize);
+          }
+        }
+      }
     },
     start() {
       this.loop = requestAnimationFrame(this.game);
     },
     pause() {
       cancelAnimationFrame(this.loop);
-    }
+    },
+    generateBrick() {
+      console.log('生成方塊')
+      // Create a new brick
+      this.brick = {};
+      // Set brick coordination
+      this.brick.coord = [
+        {x: 3, y: 0}, {x: 4, y: 0}, {x: 5, y: 0}, {x: 6, y: 0}
+      ];
+      // Set brick base line
+      this.brick.base = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
+      this.brick.coord.forEach(coord => {
+        this.tetrisGrid[coord.y][coord.x].status = 1;
+      });
+    },
+    dropBrick() {
+      // Drop Brick if haven't touch ground yet
+      if(this.brick.base < this.tetrisCfgs.row - 1 && !this.brickCollide) {
+        // Clear previous position
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 0;
+        });
+        // Update brick position
+        this.brick.coord = this.brick.coord.map(coord => {
+          coord.y += 1;
+          return coord;
+        });
+        // Update brick base line
+        this.brick.base = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
+        // Mark new position
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 1;
+        });
+      } else {
+        // Release the controlled brick
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 2;
+        });
+        // Switch flag: brick has touched the ground
+        this.touchBottom = true;
+      }
+    },
   }
 }
 </script>
