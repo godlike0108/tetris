@@ -64,11 +64,16 @@ export default {
       });
     },
     brickPatterns() {
-      // let center = this.tetrisCfgs.column / 2 - 1;
-      let center = 4;
+      let center = this.tetrisCfgs.column / 2 - 1;
       let patterns = [
         [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}, {x: center+2, y:0}],
-        [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}]
+        [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}],
+        [{x: center-1, y:1}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}],
+        [{x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}, {x: center+1, y:1}],
+        [{x: center, y:0}, {x: center+1, y:0}, {x: center+1, y:1}],
+        [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}],
+        [{x: center, y:0}, {x: center+1, y:0}],
+        [{x: center, y:0}]
       ];
       return patterns;
     }
@@ -109,13 +114,12 @@ export default {
       cancelAnimationFrame(this.loop);
     },
     generateBrick() {
-      console.log('生成方塊')
       // Create a new brick
       this.brick = {};
       // Choose a random pattern 0 or 1
       let patternIndex = Math.floor(Math.random() * this.brickPatterns.length);
       // Set brick coordination
-      this.brick.coord = this.brickPatterns[patternIndex].slice(0);
+      this.brick.coord = JSON.parse(JSON.stringify(this.brickPatterns[patternIndex]));
       // Set brick base line
       this.brick.base = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
       this.brick.coord.forEach(coord => {
@@ -125,7 +129,6 @@ export default {
     dropBrick() {
       // Drop Brick if haven't touch ground yet
       if(this.brick.base < this.tetrisCfgs.row - 1 && !this.brickCollide) {
-        console.log('真的有在掉')
         // Clear previous position
         this.brick.coord.forEach(coord => {
           this.tetrisGrid[coord.y][coord.x].status = 0;
@@ -142,7 +145,6 @@ export default {
           this.tetrisGrid[coord.y][coord.x].status = 1;
         });
       } else {
-        console.log('掉完了')
         // Release the controlled brick
         this.brick.coord.forEach(coord => {
           this.tetrisGrid[coord.y][coord.x].status = 2;
