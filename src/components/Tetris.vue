@@ -33,6 +33,9 @@ export default {
     // init score
     this.score = 0;
 
+    // load controller
+    this.loadController();
+
     /* Start Game Loop */
     // this.start();
     console.log(this.tetrisGrid)
@@ -41,6 +44,11 @@ export default {
   },
   data () {
     return {
+      lastTime: 0,
+      current: 0,
+      elapsed: 0,
+      delta: 0,
+      iFPS: 5,
       canvas: null,
       ctx: null,
       tetrisCfgs: {
@@ -55,14 +63,14 @@ export default {
       touchBottom: true,
       // Brick on control
       brick: {},
+      gamePad: {
+        right: false,
+        down: false,
+        left: false
+      }
     }
   },
   computed: {
-    brickCollide() {
-      return this.brick.coord.some(coord => {
-        return this.tetrisGrid[coord.y+1][coord.x].status === 2;
-      });
-    },
     brickPatterns() {
       let center = this.tetrisCfgs.column / 2 - 1;
       let patterns = [
@@ -76,18 +84,34 @@ export default {
         [{x: center, y:0}]
       ];
       return patterns;
-    }
+    },
   },
   methods: {
-    game() {
+    game(timestamp) {
+      this.current = timestamp;
+      this.elapsed = this.current - this.lastTime;
+
+      if(this.elapsed < 1000 / this.iFPS) {
+        this.loop = requestAnimationFrame(this.game);
+        return;
+      };
+
       this.update();
       this.render();
+      this.lastTime = this.current;
       this.loop = requestAnimationFrame(this.game);
     },
     update() {
       // bricks life cycle
       if(!this.touchBottom) {
         this.dropBrick();
+
+        switch(true) {
+          case this.gamePad.down: this.dropBrick(); break;
+          case this.gamePad.left: this.moveBrick('left'); break;
+          case this.gamePad.right: this.moveBrick('right'); break;
+        }
+
       } else {
         this.generateBrick();
         this.touchBottom = false;
@@ -120,15 +144,17 @@ export default {
       let patternIndex = Math.floor(Math.random() * this.brickPatterns.length);
       // Set brick coordination
       this.brick.coord = JSON.parse(JSON.stringify(this.brickPatterns[patternIndex]));
-      // Set brick base line
-      this.brick.base = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
+      // Set brick limits
+      this.brick.bottomLimit = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
+      this.brick.leftLimit = this.brick.coord.reduce((min, cur) => Math.min(min, cur.x), this.tetrisCfgs.column - 1);
+      this.brick.rightLimit = this.brick.coord.reduce((max, cur) => Math.max(max, cur.x), 0);
       this.brick.coord.forEach(coord => {
         this.tetrisGrid[coord.y][coord.x].status = 1;
       });
     },
     dropBrick() {
       // Drop Brick if haven't touch ground yet
-      if(this.brick.base < this.tetrisCfgs.row - 1 && !this.brickCollide) {
+      if(!this.brickTouchBottom() && !this.brickCollideBot()) {
         // Clear previous position
         this.brick.coord.forEach(coord => {
           this.tetrisGrid[coord.y][coord.x].status = 0;
@@ -139,7 +165,7 @@ export default {
           return coord;
         });
         // Update brick base line
-        this.brick.base = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
+        this.brick.bottomLimit += 1;
         // Mark new position
         this.brick.coord.forEach(coord => {
           this.tetrisGrid[coord.y][coord.x].status = 1;
@@ -152,6 +178,81 @@ export default {
         // Switch flag: brick has touched the ground
         this.touchBottom = true;
       }
+    },
+    moveBrick(dir) {
+      // Clear previous position
+      this.brick.coord.forEach(coord => {
+        this.tetrisGrid[coord.y][coord.x].status = 0;
+      });
+
+      // Update brick position
+      if(dir === 'left' && !this.brickCollideLeft()) {
+        this.brick.coord = this.brick.coord.map(coord => {
+          coord.x -= 1;
+          return coord;
+        });
+        this.brick.leftLimit -= 1;
+        this.brick.rightLimit -= 1;
+      }
+
+      if(dir === 'right' && !this.brickCollideRight()) {
+        this.brick.coord = this.brick.coord.map(coord => {
+          coord.x += 1;
+          return coord;
+        });
+        this.brick.leftLimit += 1;
+        this.brick.rightLimit += 1;
+      }
+      console.log(this.brickCollideLeft(), this.brickCollideRight(), this.brick.leftLimit, this.brick.rightLimit)
+
+      // Mark new position
+      this.brick.coord.forEach(coord => {
+        this.tetrisGrid[coord.y][coord.x].status = 1;
+      });
+    },
+    loadController() {
+      addEventListener('keydown', e => {
+        if(e.keyCode === 40) {
+          this.gamePad.down = true;
+        }
+
+        if(e.keyCode === 37) {
+          this.gamePad.left = true;
+        } else if(e.keyCode === 39) {
+          this.gamePad.right = true;
+        }
+      });
+      addEventListener('keyup', e => {
+        if(e.keyCode === 40) {
+          this.gamePad.down = false;
+        }
+
+        if(e.keyCode === 37) {
+          this.gamePad.left = false;
+        } else if(e.keyCode === 39) {
+          this.gamePad.right = false;
+        }
+      });
+    },
+    brickTouchBottom() {
+      return this.brick.bottomLimit >= this.tetrisCfgs.row - 1;
+    },
+    brickCollideBot() {
+      return this.brick.coord.some(coord => {
+        return this.tetrisGrid[coord.y+1][coord.x].status === 2;
+      });
+    },
+    brickCollideLeft() {
+      if(this.brick.leftLimit <= 0) return true;
+      return this.brick.coord.some(coord => {
+        return this.tetrisGrid[coord.y][coord.x-1].status === 2;
+      });
+    },
+    brickCollideRight() {
+      if(this.brick.rightLimit >= this.tetrisCfgs.column - 1) return true;
+      return this.brick.coord.some(coord => {
+        return this.tetrisGrid[coord.y][coord.x+1].status === 2;
+      });
     },
   }
 }
