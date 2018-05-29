@@ -17,6 +17,9 @@ export default {
     this.ctx.canvas.height = this.tetrisCfgs.row * this.tetrisCfgs.unitSize;
 
     /* Initialize Tetris */
+    // init brick patterns
+    this.initBrickPatterns(this.tetrisCfgs.column / 2 - 1);
+
     // init data array
     for(let i = 0; i < this.tetrisCfgs.row; i++) {
       let tetrisRow = [];
@@ -56,6 +59,7 @@ export default {
         column: 10,
         unitSize: 30,
       },
+      tetrisCenter: 0,
       tetrisGrid: [],
       score: 0,
       loop: null,
@@ -63,28 +67,14 @@ export default {
       touchBottom: true,
       // Brick on control
       brick: {},
+      brickPatterns: [],
       gamePad: {
+        up: false,
         right: false,
         down: false,
         left: false
       }
     }
-  },
-  computed: {
-    brickPatterns() {
-      let center = this.tetrisCfgs.column / 2 - 1;
-      let patterns = [
-        [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}, {x: center+2, y:0}],
-        [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}],
-        [{x: center-1, y:1}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}],
-        [{x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}, {x: center+1, y:1}],
-        [{x: center, y:0}, {x: center+1, y:0}, {x: center+1, y:1}],
-        [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}],
-        [{x: center, y:0}, {x: center+1, y:0}],
-        [{x: center, y:0}]
-      ];
-      return patterns;
-    },
   },
   methods: {
     game(timestamp) {
@@ -107,6 +97,7 @@ export default {
         this.dropBrick();
 
         switch(true) {
+          case this.gamePad.up: this.rotateBrick(); break;
           case this.gamePad.down: this.dropBrick(); break;
           case this.gamePad.left: this.moveBrick('left'); break;
           case this.gamePad.right: this.moveBrick('right'); break;
@@ -137,14 +128,58 @@ export default {
     pause() {
       cancelAnimationFrame(this.loop);
     },
+    initBrickPatterns(center) {
+      this.brickPatterns = [
+          [
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}, {x: center+2, y:0}],
+            [{x: center, y:-1}, {x: center, y:0}, {x: center, y:1}, {x: center, y:2}]
+          ],
+          [
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}],
+            [{x: center-1, y:0}, {x: center, y:-1}, {x: center, y:0}, {x: center, y:1}],
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:-1}, {x: center+1, y:0}],
+            [{x: center, y:-1}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}]
+          ],
+          [
+            [{x: center-1, y:1}, {x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}],
+            [{x: center-1, y:-1}, {x: center-1, y:0}, {x: center, y:0}, {x: center, y:1}]
+          ],
+          [
+            [{x: center, y:0}, {x: center, y:1}, {x: center+1, y:0}, {x: center+1, y:1}]
+          ],
+          [
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:1}],
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center, y:-1}],
+            [{x: center, y:-1}, {x: center, y:0}, {x: center+1, y:0}],
+            [{x: center, y:0}, {x: center+1, y:0}, {x: center, y:1}]
+          ],
+          [
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}],
+            [{x: center, y:-1}, {x: center, y:0}, {x: center, y:1}]
+          ],
+          [
+            [{x: center-1, y:0}, {x: center, y:0}, {x: center+1, y:0}],
+            [{x: center, y:-1}, {x: center, y:0}, {x: center, y:1}]
+          ],
+          [
+            [{x: center, y:0}, {x: center+1, y:0}],
+            [{x: center, y:0}, {x: center, y:1}]
+          ],
+          [
+            [{x: center, y:0}]
+          ]
+      ];
+    },
     generateBrick() {
       // Create a new brick
       this.brick = {};
-      // Choose a random pattern 0 or 1
+      // Choose a random pattern
       let patternIndex = Math.floor(Math.random() * this.brickPatterns.length);
       // Set brick coordination
-      this.brick.coord = JSON.parse(JSON.stringify(this.brickPatterns[patternIndex]));
-      // Set brick limits
+      this.brick.coord = JSON.parse(JSON.stringify(this.brickPatterns[patternIndex][0]));
+      // Set brick properties
+      this.brick.type = patternIndex;
+      this.brick.dir = 0;
       this.brick.bottomLimit = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
       this.brick.leftLimit = this.brick.coord.reduce((min, cur) => Math.min(min, cur.x), this.tetrisCfgs.column - 1);
       this.brick.rightLimit = this.brick.coord.reduce((max, cur) => Math.max(max, cur.x), 0);
@@ -164,7 +199,7 @@ export default {
           coord.y += 1;
           return coord;
         });
-        // Update brick base line
+        // Update brick properties
         this.brick.bottomLimit += 1;
         // Mark new position
         this.brick.coord.forEach(coord => {
@@ -180,38 +215,101 @@ export default {
       }
     },
     moveBrick(dir) {
-      // Clear previous position
-      this.brick.coord.forEach(coord => {
-        this.tetrisGrid[coord.y][coord.x].status = 0;
-      });
-
-      // Update brick position
       if(dir === 'left' && !this.brickCollideLeft()) {
+        // Clear previous position
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 0;
+        });
+        // Update brick position
         this.brick.coord = this.brick.coord.map(coord => {
           coord.x -= 1;
           return coord;
         });
+        // Update brick base line
         this.brick.leftLimit -= 1;
         this.brick.rightLimit -= 1;
+        // Mark new position
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 1;
+        });
       }
 
       if(dir === 'right' && !this.brickCollideRight()) {
+        // Clear previous position
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 0;
+        });
+        // Update brick position
         this.brick.coord = this.brick.coord.map(coord => {
           coord.x += 1;
           return coord;
         });
+        // Update brick base line
         this.brick.leftLimit += 1;
         this.brick.rightLimit += 1;
+        // Mark new position
+        this.brick.coord.forEach(coord => {
+          this.tetrisGrid[coord.y][coord.x].status = 1;
+        });
       }
-      console.log(this.brickCollideLeft(), this.brickCollideRight(), this.brick.leftLimit, this.brick.rightLimit)
+    },
+    rotateBrick() {
+      // Get the diff between rotate patterns
+      let delta = [];
+      let type = this.brick.type;
+      let dir = this.brickPatterns[this.brick.type].length;
+      let nextDir = (this.brick.dir + 1) % dir;
+      for(let i = 0; i < this.brickPatterns[type][this.brick.dir].length; i++) {
+        let coord = {
+          x: this.brickPatterns[type][nextDir][i].x - this.brickPatterns[type][this.brick.dir][i].x,
+          y: this.brickPatterns[type][nextDir][i].y - this.brickPatterns[type][this.brick.dir][i].y
+        }
+        delta.push(coord);
+      }
 
-      // Mark new position
+      // make a preview of rotated brick
+      let preview = [];
+      for(let i = 0; i < this.brick.coord.length; i++) {
+        let newCoord = {
+          x: this.brick.coord[i].x + delta[i].x,
+          y: this.brick.coord[i].y + delta[i].y
+        };
+        preview.push(newCoord);
+      }
+
+      // preview can't collide with wall
+      let collideWithWall = preview.some(coord => {
+        return coord.x < 0 || coord.x >= this.tetrisCfgs.column || coord.y < 0 || coord.y >= this.tetrisCfgs.row;
+      })
+      if(collideWithWall) return;
+
+      // preview can't collide with other bricks
+      let collideWithBricks = preview.some(coord => {
+        return this.tetrisGrid[coord.y][coord.x].status === 2;
+      })
+      if(collideWithBricks) return;
+
+      // if no collision, update brick position
+      this.brick.coord.forEach(coord => {
+        this.tetrisGrid[coord.y][coord.x].status = 0;
+      });
+      this.brick.coord = JSON.parse(JSON.stringify(preview));
       this.brick.coord.forEach(coord => {
         this.tetrisGrid[coord.y][coord.x].status = 1;
       });
+      this.brick.bottomLimit = this.brick.coord.reduce((max, cur) => Math.max(max, cur.y), 0);
+      this.brick.leftLimit = this.brick.coord.reduce((min, cur) => Math.min(min, cur.x), this.tetrisCfgs.column - 1);
+      this.brick.rightLimit = this.brick.coord.reduce((max, cur) => Math.max(max, cur.x), 0);
+      // update direction
+      this.brick.dir = nextDir;
+
     },
     loadController() {
       addEventListener('keydown', e => {
+        if(e.keyCode === 38) {
+          this.gamePad.up = true;
+        }
+
         if(e.keyCode === 40) {
           this.gamePad.down = true;
         }
@@ -223,6 +321,10 @@ export default {
         }
       });
       addEventListener('keyup', e => {
+        if(e.keyCode === 38) {
+          this.gamePad.up = false;
+        }
+
         if(e.keyCode === 40) {
           this.gamePad.down = false;
         }
