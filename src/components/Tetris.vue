@@ -1,5 +1,6 @@
 <template>
   <div>
+    <p>{{gameMsg}}</p>
     <p>Score: {{score}}</p>
     <canvas id="canvas"></canvas>
     <button @click="start">Start</button>
@@ -15,35 +16,6 @@ export default {
     this.ctx = document.querySelector('#canvas').getContext('2d');
     this.ctx.canvas.width = this.tetrisCfgs.column * this.tetrisCfgs.unitSize;
     this.ctx.canvas.height = this.tetrisCfgs.row * this.tetrisCfgs.unitSize;
-
-    /* Initialize Tetris */
-    // init brick patterns
-    this.initBrickPatterns(this.tetrisCfgs.column / 2 - 1);
-
-    // init data array
-    for(let i = 0; i < this.tetrisCfgs.row; i++) {
-      let tetrisRow = [];
-      for(let j = 0; j < this.tetrisCfgs.column; j++) {
-        tetrisRow.push({
-          status: 0,
-          x: j * this.tetrisCfgs.unitSize,
-          y: i * this.tetrisCfgs.unitSize
-        });
-      }
-      this.tetrisGrid.push(tetrisRow);
-    }
-
-    // init score
-    this.score = 0;
-
-    // load controller
-    this.loadController();
-
-    /* Start Game Loop */
-    // this.start();
-    console.log(this.tetrisGrid)
-    console.log(this.ctx)
-
   },
   data () {
     return {
@@ -51,7 +23,11 @@ export default {
       current: 0,
       elapsed: 0,
       delta: 0,
-      iFPS: 5,
+      tick: 0,
+      gameSpeed: 30,
+      inputDelay: 300,
+      inputReady: true,
+      iFPS: 60,
       canvas: null,
       ctx: null,
       tetrisCfgs: {
@@ -61,6 +37,7 @@ export default {
       },
       tetrisCenter: 0,
       tetrisGrid: [],
+      gameMsg: null,
       score: 0,
       loop: null,
       // For brick life cycle
@@ -80,21 +57,52 @@ export default {
     game(timestamp) {
       this.current = timestamp;
       this.elapsed = this.current - this.lastTime;
+      this.tick = this.tick + 1; 
 
       if(this.elapsed < 1000 / this.iFPS) {
         this.loop = requestAnimationFrame(this.game);
         return;
       };
+      this.loop = requestAnimationFrame(this.game);
 
       this.update();
       this.render();
       this.lastTime = this.current;
-      this.loop = requestAnimationFrame(this.game);
+    },
+    init() {
+      // init brick patterns
+      this.initBrickPatterns(this.tetrisCfgs.column / 2 - 1);
+
+      // init data array
+      this.tetrisGrid = [];
+      for(let i = 0; i < this.tetrisCfgs.row; i++) {
+        let tetrisRow = [];
+        for(let j = 0; j < this.tetrisCfgs.column; j++) {
+          tetrisRow.push({
+            status: 0,
+            x: j * this.tetrisCfgs.unitSize,
+            y: i * this.tetrisCfgs.unitSize
+          });
+        }
+        this.tetrisGrid.push(tetrisRow);
+      }
+
+      // init score
+      this.score = 0;
+      // init gameMsg
+      this.gameMsg = null;
+
+      // load controller
+      this.loadController();
     },
     update() {
       // bricks life cycle
       if(!this.touchBottom) {
-        this.dropBrick();
+        if(this.tick >= this.gameSpeed) {
+          this.dropBrick();
+          this.tick %= this.gameSpeed;
+        }
+
 
         switch(true) {
           case this.gamePad.up: this.rotateBrick(); break;
@@ -107,6 +115,7 @@ export default {
         this.generateBrick();
         this.touchBottom = false;
       }
+      this.examineGameOver();
     },
     render() {
       // Clear the previous frame
@@ -123,6 +132,7 @@ export default {
       }
     },
     start() {
+      this.init();
       this.loop = requestAnimationFrame(this.game);
     },
     pause() {
@@ -210,8 +220,11 @@ export default {
         this.brick.coord.forEach(coord => {
           this.tetrisGrid[coord.y][coord.x].status = 2;
         });
+        this.brick.coord = [];
         // Switch flag: brick has touched the ground
         this.touchBottom = true;
+        // Clear if any row is full
+        this.clearRow();
       }
     },
     moveBrick(dir) {
@@ -254,6 +267,8 @@ export default {
       }
     },
     rotateBrick() {
+      if(!this.inputReady) return;
+      this.inputReady = false;
       // Get the diff between rotate patterns
       let delta = [];
       let type = this.brick.type;
@@ -303,6 +318,8 @@ export default {
       // update direction
       this.brick.dir = nextDir;
 
+      // set input to ready
+      setTimeout(() => {this.inputReady = true;}, this.inputDelay)
     },
     loadController() {
       addEventListener('keydown', e => {
@@ -356,6 +373,47 @@ export default {
         return this.tetrisGrid[coord.y][coord.x+1].status === 2;
       });
     },
+    clearRow() {
+      let clearedRow = 0;
+      let result = this.tetrisGrid.map(row => {
+        let rowIsFull = row.every(col => col.status === 2);
+        if(rowIsFull) {
+          clearedRow++;
+          return row.map(col => {
+            let obj = {
+              status: 0
+            }
+            return obj;
+          });
+        } else {
+          return JSON.parse(JSON.stringify(row));
+        }
+      });
+      let newRow = [];
+      for(let i = 0; i < this.tetrisCfgs.column; i++) {
+       newRow.push({status: 0}) ;
+      }
+      for(let i = 0; i < clearedRow; i++) {
+        result.pop();
+        result.unshift(newRow);
+      }
+
+      if(clearedRow > 0) {
+        for(let i = 0; i < this.tetrisCfgs.row; i++) {
+          for(let j = 0; j < this.tetrisCfgs.column; j++) {
+           this.tetrisGrid[i][j].status = result[i][j].status;
+          }
+        }
+      }
+      this.score += clearedRow * 5;
+    },
+    examineGameOver() {
+      let touchTop = this.tetrisGrid[0].some(col => col.status === 2);
+      if(touchTop) {
+        this.gameMsg = 'Game Over';
+        this.pause();
+      }
+    }
   }
 }
 </script>
