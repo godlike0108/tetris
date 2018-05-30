@@ -296,13 +296,19 @@ export default {
       let collideWithWall = preview.some(coord => {
         return coord.x < 0 || coord.x >= this.tetrisCfgs.column || coord.y < 0 || coord.y >= this.tetrisCfgs.row;
       })
-      if(collideWithWall) return;
+      if(collideWithWall) {
+        this.inputReady = true;
+        return;
+      }
 
       // preview can't collide with other bricks
       let collideWithBricks = preview.some(coord => {
         return this.tetrisGrid[coord.y][coord.x].status === 2;
       })
-      if(collideWithBricks) return;
+      if(collideWithBricks) {
+        this.inputReady = true;
+        return;
+      }
 
       // if no collision, update brick position
       this.brick.coord.forEach(coord => {
